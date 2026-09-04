@@ -17,7 +17,7 @@ func customHandler(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte("OK"))
 }
 
-type Chirp struct {
+type ChirpRequest struct {
 	Body   string    `json:"body"`
 	UserID uuid.UUID `json:"user_id"`
 }
@@ -32,7 +32,7 @@ type ChirpResponse struct {
 
 func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
 	decoder := json.NewDecoder(r.Body)
-	chirp := Chirp{}
+	chirp := ChirpRequest{}
 	err := decoder.Decode(&chirp)
 	if err != nil {
 		sendError(w, "request could not be decoded.", 400, err)
@@ -65,7 +65,7 @@ func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
 	sendResponse(w, 201, chirpResponse)
 }
 
-func validateChirp(chirp Chirp) error {
+func validateChirp(chirp ChirpRequest) error {
 	if len(chirp.Body) > 140 {
 		fmt.Println("chirp too long")
 		return fmt.Errorf("Chirp is too long")
@@ -88,4 +88,24 @@ func replaceProfaneWords(input string) string {
 		}
 	}
 	return output
+}
+
+func (cfg *apiConfig) getAllChirpsHandler(w http.ResponseWriter, r *http.Request) {
+	allChirps, err := cfg.db.GetAllChirps(r.Context())
+	if err != nil {
+		sendError(w, "Couldn't get all chirps", 500, err)
+		return
+	}
+
+	formatedChirps := []ChirpResponse{}
+	for _, chirp := range allChirps {
+		formatedChirps = append(formatedChirps, ChirpResponse{
+			ID:        chirp.ID,
+			CreatedAt: chirp.CreatedAt,
+			UpdatedAt: chirp.UpdatedAt,
+			Body:      chirp.Body,
+			UserID:    chirp.UserID,
+		})
+	}
+	sendResponse(w, 200, formatedChirps)
 }

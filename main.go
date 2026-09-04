@@ -40,10 +40,15 @@ func main() {
 
 	defaultHandler := http.StripPrefix("/app", http.FileServer(http.Dir(".")))
 	mux.Handle("/app/", apiConfig.middleWareMetricInc(defaultHandler))
-	mux.HandleFunc("GET /api/healthz/", customHandler)
-	mux.HandleFunc("GET /admin/metrics/", apiConfig.getHitsHandler)
+
+	mux.HandleFunc("GET /admin/metrics", apiConfig.getHitsHandler)
 	mux.HandleFunc("POST /admin/reset", apiConfig.resetHandler)
+
+	mux.HandleFunc("GET /api/healthz", customHandler)
+
+	mux.HandleFunc("GET /api/chirps", apiConfig.getAllChirpsHandler)
 	mux.HandleFunc("POST /api/chirps", apiConfig.chirpHandler)
+
 	mux.HandleFunc("POST /api/users", apiConfig.createUserHandler)
 
 	server := http.Server{
