@@ -43,22 +43,6 @@ func validateChirpHandler(w http.ResponseWriter, req *http.Request) {
 	sendOK(w, chirp)
 }
 
-func sendError(w http.ResponseWriter, err error) {
-	errorResponse := ErrorResponse{
-		Error: err.Error(),
-	}
-	byteResponse, err := json.Marshal(errorResponse)
-	if err != nil {
-		fmt.Println("Error couldnt be processed.")
-		w.WriteHeader(500)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(400)
-	w.Write(byteResponse)
-}
-
 func sendOK(w http.ResponseWriter, chirp Chirp) {
 	res := OKResponse{
 		CleanedBody: replaceProfaneWords(chirp.Body),

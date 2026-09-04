@@ -20,7 +20,7 @@ func (cfg *apiConfig) middleWareMetricInc(next http.Handler) http.Handler {
 	})
 }
 
-func (cfg *apiConfig) getHitsHandler(w http.ResponseWriter, req *http.Request) {
+func (cfg *apiConfig) getHitsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	body := fmt.Sprintf(`
 <html>
@@ -34,7 +34,8 @@ func (cfg *apiConfig) getHitsHandler(w http.ResponseWriter, req *http.Request) {
 	w.Write([]byte(body))
 }
 
-func (cfg *apiConfig) resetHandler(w http.ResponseWriter, req *http.Request) {
+func (cfg *apiConfig) resetHandler(w http.ResponseWriter, r *http.Request) {
 	cfg.fileserverHits.Store(0)
+	cfg.db.DeleteAllUser(r.Context())
 	w.Write([]byte("OK"))
 }
