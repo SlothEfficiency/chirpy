@@ -25,13 +25,13 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) 
 
 	err := decoder.Decode(&userRequest)
 	if err != nil {
-		sendError(w, err)
+		sendError(w, "request could not be decoded.", 400, err)
 		return
 	}
 
 	user, err := cfg.db.CreateUser(r.Context(), userRequest.Email)
 	if err != nil {
-		sendError(w, err)
+		sendError(w, "User creation failed", 500, err)
 		return
 	}
 
@@ -42,13 +42,5 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) 
 		Email:     user.Email,
 	}
 
-	res, err := json.Marshal(userResponse)
-	if err != nil {
-		sendError(w, err)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(201)
-	w.Write(res)
+	sendResponse(w, 201, userResponse)
 }

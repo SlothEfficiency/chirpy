@@ -2,15 +2,27 @@ package main
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
+	"sync/atomic"
 
 	"github.com/SlothEfficiency/chirpy/internal/database"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
+
+type apiConfig struct {
+	fileserverHits atomic.Int32
+	db             *database.Queries
+}
+
+func (cfg *apiConfig) middleWareMetricInc(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cfg.fileserverHits.Add(1)
+		next.ServeHTTP(w, r)
+	})
+}
 
 func main() {
 	godotenv.Load(".env")
@@ -30,8 +42,8 @@ func main() {
 	mux.Handle("/app/", apiConfig.middleWareMetricInc(defaultHandler))
 	mux.HandleFunc("GET /api/healthz/", customHandler)
 	mux.HandleFunc("GET /admin/metrics/", apiConfig.getHitsHandler)
-	mux.HandleFunc("POST /admin/reset/", apiConfig.resetHandler)
-	mux.HandleFunc("POST /api/validate_chirp", validateChirpHandler)
+	mux.HandleFunc("POST /admin/reset", apiConfig.resetHandler)
+	mux.HandleFunc("POST /api/chirps", apiConfig.chirpHandler)
 	mux.HandleFunc("POST /api/users", apiConfig.createUserHandler)
 
 	server := http.Server{
@@ -39,20 +51,4 @@ func main() {
 		Handler: mux,
 	}
 	server.ListenAndServe()
-}
-
-func sendError(w http.ResponseWriter, err error) {
-	errorResponse := ErrorResponse{
-		Error: err.Error(),
-	}
-	byteResponse, err := json.Marshal(errorResponse)
-	if err != nil {
-		fmt.Println("Error couldnt be processed.")
-		w.WriteHeader(500)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(400)
-	w.Write(byteResponse)
 }
