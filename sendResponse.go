@@ -27,7 +27,7 @@ func sendError(w http.ResponseWriter, internalMsg string, statusCode int, err er
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(400)
+	w.WriteHeader(statusCode)
 	w.Write(byteResponse)
 }
 

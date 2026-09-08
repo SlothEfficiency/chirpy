@@ -47,6 +47,7 @@ func main() {
 	mux.HandleFunc("GET /api/healthz", customHandler)
 
 	mux.HandleFunc("GET /api/chirps", apiConfig.getAllChirpsHandler)
+	mux.HandleFunc("GET /api/chirps/{id}", apiConfig.getChirpByID)
 	mux.HandleFunc("POST /api/chirps", apiConfig.chirpHandler)
 
 	mux.HandleFunc("POST /api/users", apiConfig.createUserHandler)
