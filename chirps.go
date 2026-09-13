@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/SlothEfficiency/chirpy/internal/auth"
 	"github.com/SlothEfficiency/chirpy/internal/database"
 	"github.com/google/uuid"
 )
@@ -18,8 +19,7 @@ func customHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 type ChirpRequest struct {
-	Body   string    `json:"body"`
-	UserID uuid.UUID `json:"user_id"`
+	Body string `json:"body"`
 }
 
 type ChirpResponse struct {
@@ -31,9 +31,21 @@ type ChirpResponse struct {
 }
 
 func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		sendError(w, "Couldnt read token.", 400, err)
+		return
+	}
+
+	userID, err := auth.ValidateJWT(token, cfg.tokenSecret)
+	if err != nil {
+		sendError(w, "Couldnt validate token", 401, err)
+		return
+	}
+
 	decoder := json.NewDecoder(r.Body)
 	chirp := ChirpRequest{}
-	err := decoder.Decode(&chirp)
+	err = decoder.Decode(&chirp)
 	if err != nil {
 		sendError(w, "request could not be decoded.", 400, err)
 		return
@@ -47,7 +59,7 @@ func (cfg *apiConfig) chirpHandler(w http.ResponseWriter, r *http.Request) {
 
 	parameters := database.CreateChirpParams{
 		Body:   replaceProfaneWords(chirp.Body),
-		UserID: chirp.UserID,
+		UserID: userID,
 	}
 	chirpEntry, err := cfg.db.CreateChirp(r.Context(), parameters)
 	if err != nil {

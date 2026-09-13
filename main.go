@@ -15,6 +15,7 @@ import (
 type apiConfig struct {
 	fileserverHits atomic.Int32
 	db             *database.Queries
+	tokenSecret    string
 }
 
 func (cfg *apiConfig) middleWareMetricInc(next http.Handler) http.Handler {
@@ -27,6 +28,7 @@ func (cfg *apiConfig) middleWareMetricInc(next http.Handler) http.Handler {
 func main() {
 	godotenv.Load(".env")
 	dbURL := os.Getenv("DB_URL")
+	tokenSecret := os.Getenv("TOKEN_SECRET")
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		fmt.Println("Could not connect to database.")
@@ -34,7 +36,8 @@ func main() {
 	}
 
 	apiConfig := apiConfig{
-		db: database.New(db),
+		db:          database.New(db),
+		tokenSecret: tokenSecret,
 	}
 	mux := http.NewServeMux()
 
@@ -51,6 +54,9 @@ func main() {
 	mux.HandleFunc("POST /api/chirps", apiConfig.chirpHandler)
 
 	mux.HandleFunc("POST /api/users", apiConfig.createUserHandler)
+	mux.HandleFunc("POST /api/login", apiConfig.loginHandler)
+	mux.HandleFunc("POST /api/refresh", apiConfig.refreshHandler)
+	mux.HandleFunc("POST /api/revoke", apiConfig.revokeHandler)
 
 	server := http.Server{
 		Addr:    ":8080",
