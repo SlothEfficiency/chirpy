@@ -16,10 +16,11 @@ type createUserRequest struct {
 }
 
 type createUserResponse struct {
-	ID        uuid.UUID `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Email     string    `json:"email"`
+	ID          uuid.UUID `json:"id"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	Email       string    `json:"email"`
+	IsChirpyRed bool      `json:"is_chirpy_red"`
 }
 
 type loginRequest struct {
@@ -32,8 +33,16 @@ type loginResponse struct {
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 	Email        string    `json:"email"`
+	IsChirpyRed  bool      `json:"is_chirpy_red"`
 	Token        string    `json:"token"`
 	RefreshToken string    `json:"refresh_token"`
+}
+
+type upgradeWebhook struct {
+	Event string `json:"event"`
+	Data  struct {
+		UserID uuid.UUID `json:"user_id"`
+	} `json:"data"`
 }
 
 func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) {
@@ -63,10 +72,11 @@ func (cfg *apiConfig) createUserHandler(w http.ResponseWriter, r *http.Request) 
 	}
 
 	userResponse := createUserResponse{
-		ID:        user.ID,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-		Email:     user.Email,
+		ID:          user.ID,
+		CreatedAt:   user.CreatedAt,
+		UpdatedAt:   user.UpdatedAt,
+		Email:       user.Email,
+		IsChirpyRed: user.IsChirpyRed,
 	}
 
 	sendResponse(w, 201, userResponse)
@@ -117,6 +127,7 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:    user.CreatedAt,
 			UpdatedAt:    user.UpdatedAt,
 			Email:        user.Email,
+			IsChirpyRed:  user.IsChirpyRed,
 			Token:        token,
 			RefreshToken: refreshToken,
 		}
@@ -125,4 +136,83 @@ func (cfg *apiConfig) loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(401)
 	w.Write([]byte("Incorrect email or password"))
+}
+
+func (cfg *apiConfig) changePasswordHandler(w http.ResponseWriter, r *http.Request) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		sendError(w, "Couldnt read token.", 401, err)
+		return
+	}
+
+	userID, err := auth.ValidateJWT(token, cfg.tokenSecret)
+	if err != nil {
+		sendError(w, "Couldnt validate token", 401, err)
+		return
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	newEmailPassword := createUserRequest{}
+	err = decoder.Decode(&newEmailPassword)
+	if err != nil {
+		sendError(w, "request could not be decoded.", 400, err)
+		return
+	}
+
+	hashedPassword, err := auth.HashPassword(newEmailPassword.Password)
+	if err != nil {
+		sendError(w, "Password could not be hashed.", 500, err)
+		return
+	}
+
+	params := database.UpdateEmailPasswordParams{
+		ID:              userID,
+		Email:           newEmailPassword.Email,
+		HashedPasswords: hashedPassword,
+	}
+	newUser, err := cfg.db.UpdateEmailPassword(r.Context(), params)
+	if err != nil {
+		sendError(w, "Password could not be updated.", 500, err)
+		return
+	}
+	userResponse := createUserResponse{
+		ID:          newUser.ID,
+		CreatedAt:   newUser.CreatedAt,
+		UpdatedAt:   newUser.UpdatedAt,
+		Email:       newUser.Email,
+		IsChirpyRed: newUser.IsChirpyRed,
+	}
+	sendResponse(w, 200, userResponse)
+}
+
+func (cfg *apiConfig) upgradeUserHandler(w http.ResponseWriter, r *http.Request) {
+	apiKey, err := auth.GetAPIKey(r.Header)
+	if err != nil {
+		sendError(w, "APIKey could not be extracted.", 401, err)
+		return
+	}
+	if apiKey != cfg.polkaKey {
+		sendError(w, "APIKey was wrong.", 401, err)
+		return
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	webhook := upgradeWebhook{}
+	err = decoder.Decode(&webhook)
+	if err != nil {
+		sendError(w, "request could not be decoded.", 400, err)
+		return
+	}
+
+	if webhook.Event != "user.upgraded" {
+		sendResponse(w, 204, nil)
+		return
+	}
+
+	_, err = cfg.db.UpgradeUserByID(r.Context(), webhook.Data.UserID)
+	if err != nil {
+		sendError(w, "User could not be upgraded", 404, err)
+		return
+	}
+	sendResponse(w, 204, nil)
 }

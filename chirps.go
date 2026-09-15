@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -103,7 +104,19 @@ func replaceProfaneWords(input string) string {
 }
 
 func (cfg *apiConfig) getAllChirpsHandler(w http.ResponseWriter, r *http.Request) {
-	allChirps, err := cfg.db.GetAllChirps(r.Context())
+	authorID := r.URL.Query().Get("author_id")
+	allChirps := []database.Chirp{}
+	var err error
+	if authorID != "" {
+		authorUUID, err := uuid.Parse(authorID)
+		if err != nil {
+			sendError(w, "Author wrong format.", 404, err)
+		}
+		allChirps, err = cfg.db.GetAllChirpsFromAuthor(r.Context(), authorUUID)
+	} else {
+		allChirps, err = cfg.db.GetAllChirps(r.Context())
+	}
+
 	if err != nil {
 		sendError(w, "Couldn't get all chirps", 500, err)
 		return
@@ -117,6 +130,13 @@ func (cfg *apiConfig) getAllChirpsHandler(w http.ResponseWriter, r *http.Request
 			UpdatedAt: chirp.UpdatedAt,
 			Body:      chirp.Body,
 			UserID:    chirp.UserID,
+		})
+	}
+
+	sort := r.URL.Query().Get("sort")
+	if sort == "desc" {
+		slices.SortFunc(formatedChirps, func(a, b ChirpResponse) int {
+			return b.CreatedAt.Compare(a.CreatedAt)
 		})
 	}
 	sendResponse(w, 200, formatedChirps)
@@ -143,4 +163,40 @@ func (cfg *apiConfig) getChirpByID(w http.ResponseWriter, r *http.Request) {
 		UserID:    chirp.UserID,
 	}
 	sendResponse(w, 200, formatedChirp)
+}
+
+func (cfg *apiConfig) deleteChirpHandler(w http.ResponseWriter, r *http.Request) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		sendError(w, "Couldnt read token.", 401, err)
+		return
+	}
+
+	userID, err := auth.ValidateJWT(token, cfg.tokenSecret)
+	if err != nil {
+		sendError(w, "Couldnt validate token", 401, err)
+		return
+	}
+	pathValue, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		sendError(w, "Not valid uuid fromat", 400, err)
+		return
+	}
+
+	chirp, err := cfg.db.GetChirpByID(r.Context(), pathValue)
+	if err != nil {
+		sendError(w, "chirp not found", 404, err)
+		return
+	}
+
+	if chirp.UserID.String() != userID.String() {
+		sendError(w, "Wrong user tried to delete a chirp", 403, fmt.Errorf("Wrong user tried to delete a chirp."))
+		return
+	}
+	err = cfg.db.DeleteChirpbyID(r.Context(), pathValue)
+	if err != nil {
+		sendError(w, "chirp not deleted", 404, err)
+		return
+	}
+	sendResponse(w, 204, nil)
 }
